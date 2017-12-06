@@ -674,7 +674,7 @@ func testCompleteMultipleQueuedTransactions(t *testing.T) bool { //nolint: gocyc
 			return
 		}
 		for txID, txResult := range results {
-			if txID != txResult.ID {
+			if txID != string(txResult.ID) {
 				t.Errorf("tx id not set in result: expected id is %s", txID)
 				return
 			}
@@ -961,7 +961,7 @@ func testDiscardMultipleQueuedTransactions(t *testing.T) bool { //nolint: gocycl
 			t.Error("unexpected number of errors (call to CompleteTransaction should not succeed)")
 		}
 		for txID, txResult := range completeResults {
-			if txID != txResult.ID {
+			if txID != string(txResult.ID) {
 				t.Errorf("tx id not set in result: expected id is %s", txID)
 				return
 			}

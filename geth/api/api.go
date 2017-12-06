@@ -200,8 +200,20 @@ func (api *StatusAPI) SendTransaction(ctx context.Context, args common.SendTxArg
 }
 
 // CompleteTransaction instructs backend to complete sending of a given transaction
-func (api *StatusAPI) CompleteTransaction(id common.QueuedTxID, password string) (gethcommon.Hash, error) {
-	return api.b.txQueueManager.CompleteTransaction(id, password)
+func (api *StatusAPI) CompleteTransaction(id common.QueuedTxID, password string) (common.CompleteTransactionResult, error) {
+	hash, err := api.b.txQueueManager.CompleteTransaction(id, password)
+
+	if err != nil {
+		return common.CompleteTransactionResult{
+			ID:    id,
+			Error: err.Error(),
+		}, err
+	}
+	return common.CompleteTransactionResult{
+		ID:   id,
+		Hash: hash.Hex(),
+	}, nil
+
 }
 
 // CompleteTransactions instructs backend to complete sending of multiple transactions

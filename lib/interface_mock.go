@@ -173,9 +173,9 @@ func (mr *MocklibStatusAPIMockRecorder) Logout() *gomock.Call {
 }
 
 // CompleteTransaction mocks base method
-func (m *MocklibStatusAPI) CompleteTransaction(id common0.QueuedTxID, password string) (common.Hash, error) {
+func (m *MocklibStatusAPI) CompleteTransaction(id common0.QueuedTxID, password string) (common0.CompleteTransactionResult, error) {
 	ret := m.ctrl.Call(m, "CompleteTransaction", id, password)
-	ret0, _ := ret[0].(common.Hash)
+	ret0, _ := ret[0].(common0.CompleteTransactionResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -567,9 +567,9 @@ func (m *MocktransactionAPI) EXPECT() *MocktransactionAPIMockRecorder {
 }
 
 // CompleteTransaction mocks base method
-func (m *MocktransactionAPI) CompleteTransaction(id common0.QueuedTxID, password string) (common.Hash, error) {
+func (m *MocktransactionAPI) CompleteTransaction(id common0.QueuedTxID, password string) (common0.CompleteTransactionResult, error) {
 	ret := m.ctrl.Call(m, "CompleteTransaction", id, password)
-	ret0, _ := ret[0].(common.Hash)
+	ret0, _ := ret[0].(common0.CompleteTransactionResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

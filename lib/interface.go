@@ -37,7 +37,7 @@ type accountAPI interface {
 }
 
 type transactionAPI interface {
-	CompleteTransaction(id common.QueuedTxID, password string) (gethcommon.Hash, error)
+	CompleteTransaction(id common.QueuedTxID, password string) (common.CompleteTransactionResult, error)
 	CompleteTransactions(ids []common.QueuedTxID, password string) map[common.QueuedTxID]common.RawCompleteTransactionResult
 	DiscardTransaction(id common.QueuedTxID) error
 	DiscardTransactions(ids []common.QueuedTxID) map[common.QueuedTxID]common.RawDiscardTransactionResult

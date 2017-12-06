@@ -394,9 +394,9 @@ func (c StopRPCCallError) Error() string {
 
 // CompleteTransactionResult is a JSON returned from transaction complete function (used in exposed method)
 type CompleteTransactionResult struct {
-	ID    string `json:"id"`
-	Hash  string `json:"hash"`
-	Error string `json:"error"`
+	ID    QueuedTxID `json:"id"`
+	Hash  string     `json:"hash"`
+	Error string     `json:"error"`
 }
 
 // CompleteTransactionsResult is list of results from CompleteTransactions() (used in exposed method)

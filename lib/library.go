@@ -129,25 +129,11 @@ func Logout() *C.char {
 //CompleteTransaction instructs backend to complete sending of a given transaction
 //export CompleteTransaction
 func CompleteTransaction(id, password *C.char) *C.char {
-	txHash, err := statusAPI.CompleteTransaction(common.QueuedTxID(C.GoString(id)), C.GoString(password))
-
-	errString := ""
+	completeTransactionResult, err := statusAPI.CompleteTransaction(common.QueuedTxID(C.GoString(id)), C.GoString(password))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		errString = err.Error()
+		log.Error("CompleteTransaction failed", "error", err.Error())
 	}
-
-	out := common.CompleteTransactionResult{
-		ID:    C.GoString(id),
-		Hash:  txHash.Hex(),
-		Error: errString,
-	}
-	outBytes, err := json.Marshal(out)
-	if err != nil {
-		log.Error("failed to marshal CompleteTransaction output", "error", err.Error())
-		return makeJSONResponse(err)
-	}
-
+	outBytes, _ := json.Marshal(completeTransactionResult)
 	return C.CString(string(outBytes))
 }
 
@@ -171,7 +157,7 @@ func CompleteTransactions(ids, password *C.char) *C.char {
 		results := statusAPI.CompleteTransactions(txIDs, C.GoString(password))
 		for txID, result := range results {
 			txResult := common.CompleteTransactionResult{
-				ID:   string(txID),
+				ID:   txID,
 				Hash: result.Hash.Hex(),
 			}
 			if result.Error != nil {
