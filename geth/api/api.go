@@ -217,8 +217,24 @@ func (api *StatusAPI) CompleteTransaction(id common.QueuedTxID, password string)
 }
 
 // CompleteTransactions instructs backend to complete sending of multiple transactions
-func (api *StatusAPI) CompleteTransactions(ids []common.QueuedTxID, password string) map[common.QueuedTxID]common.RawCompleteTransactionResult {
-	return api.b.txQueueManager.CompleteTransactions(ids, password)
+func (api *StatusAPI) CompleteTransactions(ids []common.QueuedTxID, password string) common.CompleteTransactionsResult{} {
+	results :=  api.b.txQueueManager.CompleteTransactions(ids, password)
+	out := common.CompleteTransactionsResult{}
+	out.Results = make(map[string]common.CompleteTransactionResult)
+
+	for txID, result := range results {
+		txResult := common.CompleteTransactionResult{
+			ID:   txID,
+			Hash: result.Hash.Hex(),
+		}
+		if result.Error != nil {
+			txResult.Error = result.Error.Error()
+		}
+		out.Results[string(txID)] = txResult
+	}
+
+	return  out
+
 }
 
 // DiscardTransaction discards a given transaction from transaction queue

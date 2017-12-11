@@ -140,39 +140,24 @@ func CompleteTransaction(id, password *C.char) *C.char {
 //CompleteTransactions instructs backend to complete sending of multiple transactions
 //export CompleteTransactions
 func CompleteTransactions(ids, password *C.char) *C.char {
-	out := common.CompleteTransactionsResult{}
-	out.Results = make(map[string]common.CompleteTransactionResult)
 
 	parsedIDs, err := common.ParseJSONArray(C.GoString(ids))
 	if err != nil {
-		out.Results["none"] = common.CompleteTransactionResult{
+		out.Results["none"] = 
+		outBytes, err := json.Marshal(common.CompleteTransactionResult{
 			Error: err.Error(),
-		}
-	} else {
-		txIDs := make([]common.QueuedTxID, len(parsedIDs))
-		for i, id := range parsedIDs {
-			txIDs[i] = common.QueuedTxID(id)
-		}
-
-		results := statusAPI.CompleteTransactions(txIDs, C.GoString(password))
-		for txID, result := range results {
-			txResult := common.CompleteTransactionResult{
-				ID:   txID,
-				Hash: result.Hash.Hex(),
-			}
-			if result.Error != nil {
-				txResult.Error = result.Error.Error()
-			}
-			out.Results[string(txID)] = txResult
-		}
+		})
+		return C.CString(string(outBytes))
 	}
 
-	outBytes, err := json.Marshal(out)
-	if err != nil {
-		log.Error("failed to marshal CompleteTransactions output", "error", err.Error())
-		return makeJSONResponse(err)
+	txIDs := make([]common.QueuedTxID, len(parsedIDs))
+	for i, id := range parsedIDs {
+		txIDs[i] = common.QueuedTxID(id)
 	}
 
+	results := statusAPI.CompleteTransactions(txIDs, C.GoString(password))
+
+	outBytes, _ := json.Marshal(results)
 	return C.CString(string(outBytes))
 }
 
