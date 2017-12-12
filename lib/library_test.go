@@ -20,9 +20,10 @@ func TestExportedAPI(t *testing.T) {
 }
 
 func TestExportedAPIWithMockedStatusAPI(t *testing.T) {
-	testCreateAccountWithMock(t)
-	testCreateChildAccountWithMock(t)
-	testRecoverAccountWithMock(t)
-	testValidateNodeConfigWithMock(t)
-	testCompleteTransactionWithMock(t)
+	// testCreateAccountWithMock(t)
+	// testCreateChildAccountWithMock(t)
+	// testRecoverAccountWithMock(t)
+	// testValidateNodeConfigWithMock(t)
+	// testCompleteTransactionWithMock(t)
+	testCompleteTransactionsWithMock(t)
 }

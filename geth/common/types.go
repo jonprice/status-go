@@ -401,18 +401,18 @@ type CompleteTransactionResult struct {
 
 // CompleteTransactionsResult is list of results from CompleteTransactions() (used in exposed method)
 type CompleteTransactionsResult struct {
-	Results map[string]CompleteTransactionResult `json:"results"`
+	Results map[QueuedTxID]CompleteTransactionResult `json:"results"`
 }
 
 // DiscardTransactionResult is a JSON returned from transaction discard function
 type DiscardTransactionResult struct {
-	ID    string `json:"id"`
-	Error string `json:"error"`
+	ID    QueuedTxID `json:"id"`
+	Error string     `json:"error"`
 }
 
 // DiscardTransactionsResult is a list of results from DiscardTransactions()
 type DiscardTransactionsResult struct {
-	Results map[string]DiscardTransactionResult `json:"results"`
+	Results map[QueuedTxID]DiscardTransactionResult `json:"results"`
 }
 
 type account struct {
