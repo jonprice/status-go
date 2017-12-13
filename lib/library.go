@@ -144,7 +144,7 @@ func CompleteTransactions(ids, password *C.char) *C.char {
 	err := json.Unmarshal([]byte(C.GoString(ids)), &txIDs)
 	var result common.CompleteTransactionsResult
 	if err != nil {
-		result = common.CompleteTransactionsResult{Results: make(map[string]common.CompleteTransactionResult)}
+		result = common.CompleteTransactionsResult{Results: make(map[common.QueuedTxID]common.CompleteTransactionResult)}
 		result.Results["none"] = common.CompleteTransactionResult{
 			Error: err.Error(),
 		}

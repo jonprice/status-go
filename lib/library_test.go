@@ -24,6 +24,6 @@ func TestExportedAPIWithMockedStatusAPI(t *testing.T) {
 	// testCreateChildAccountWithMock(t)
 	// testRecoverAccountWithMock(t)
 	// testValidateNodeConfigWithMock(t)
-	// testCompleteTransactionWithMock(t)
-	testCompleteTransactionsWithMock(t)
+	testCompleteTransactionWithMock(t)
+	//testCompleteTransactionsWithMock(t)
 }
