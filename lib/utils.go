@@ -100,22 +100,6 @@ func testExportedAPI(t *testing.T, done chan struct{}) {
 			testAccountLogout,
 		},
 		{
-			"complete single queued transaction",
-			testCompleteTransaction,
-		},
-		{
-			"test complete multiple queued transactions",
-			testCompleteMultipleQueuedTransactions,
-		},
-		{
-			"discard single queued transaction",
-			testDiscardTransaction,
-		},
-		{
-			"test discard multiple queued transactions",
-			testDiscardMultipleQueuedTransactions,
-		},
-		{
 			"test jail invalid initialization",
 			testJailInitInvalid,
 		},
@@ -240,7 +224,8 @@ func testResetChainData(t *testing.T) bool {
 	}
 
 	EnsureNodeSync(statusAPI.NodeManager())
-	testCompleteTransaction(t)
+	// TODO reenable check once test is migrated to the e2e package.
+	//testCompleteTransaction(t)
 
 	return true
 }
@@ -351,7 +336,8 @@ func testStopResumeNode(t *testing.T) bool { //nolint: gocyclo
 	}
 
 	// additionally, let's complete transaction (just to make sure that node lives through pause/resume w/o issues)
-	testCompleteTransaction(t)
+	// TODO reenable additional check once test is migrated to the e2e package.
+	//testCompleteTransaction(t)
 
 	return true
 }
