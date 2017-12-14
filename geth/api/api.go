@@ -217,8 +217,9 @@ func (api *StatusAPI) CompleteTransaction(id common.QueuedTxID, password string)
 }
 
 // CompleteTransactions instructs backend to complete sending of multiple transactions
-func (api *StatusAPI) CompleteTransactions(ids []common.QueuedTxID, password string) common.CompleteTransactionsResult {
+func (api *StatusAPI) CompleteTransactions(ids []common.QueuedTxID, password string) (common.CompleteTransactionsResult, map[common.QueuedTxID]error) {
 	out := common.CompleteTransactionsResult{Results: make(map[common.QueuedTxID]common.CompleteTransactionResult)}
+	errors := make(map[common.QueuedTxID]error)
 
 	for txID, result := range api.b.txQueueManager.CompleteTransactions(ids, password) {
 		txResult := common.CompleteTransactionResult{
@@ -229,9 +230,10 @@ func (api *StatusAPI) CompleteTransactions(ids []common.QueuedTxID, password str
 			txResult.Error = result.Error.Error()
 		}
 		out.Results[txID] = txResult
+		errors[txID] = result.Error
 	}
 
-	return out
+	return out, errors
 
 }
 
@@ -251,9 +253,9 @@ func (api *StatusAPI) DiscardTransaction(id common.QueuedTxID) (common.DiscardTr
 }
 
 // DiscardTransactions discards given multiple transactions from transaction queue
-func (api *StatusAPI) DiscardTransactions(ids []common.QueuedTxID) common.DiscardTransactionsResult {
+func (api *StatusAPI) DiscardTransactions(ids []common.QueuedTxID) (common.DiscardTransactionsResult, map[common.QueuedTxID]error) {
 	out := common.DiscardTransactionsResult{Results: make(map[common.QueuedTxID]common.DiscardTransactionResult)}
-
+	errors := make(map[common.QueuedTxID]error)
 	for txID, result := range api.b.txQueueManager.DiscardTransactions(ids) {
 		txResult := common.DiscardTransactionResult{
 			ID: txID,
@@ -262,9 +264,10 @@ func (api *StatusAPI) DiscardTransactions(ids []common.QueuedTxID) common.Discar
 			txResult.Error = result.Error.Error()
 		}
 		out.Results[txID] = txResult
+		errors[txID] = result.Error
 	}
 
-	return out
+	return out, errors
 }
 
 // JailParse creates a new jail cell context, with the given chatID as identifier.

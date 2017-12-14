@@ -456,11 +456,11 @@ func (s *APITestSuite) TestCompleteMultipleQueuedTransactions() bool { //nolint:
 		txIDs = append(txIDs, "invalid-tx-id")
 
 		// complete
-		resultsStruct := s.api.CompleteTransactions(txIDs, TestConfig.Account1.Password)
+		resultsStruct, errs := s.api.CompleteTransactions(txIDs, TestConfig.Account1.Password)
 		results := resultsStruct.Results
 
 		require.Len(results, testTxCount+1)
-		require.Equal(results[common.QueuedTxID("invalid-tx-id")].Error, txqueue.ErrQueuedTxIDNotFound.Error())
+		require.Equal(errs[common.QueuedTxID("invalid-tx-id")], txqueue.ErrQueuedTxIDNotFound)
 
 		for txID, txResult := range results {
 			if txID == common.QueuedTxID("invalid-tx-id") {
@@ -665,14 +665,14 @@ func (s *APITestSuite) TestDiscardMultipleQueuedTransactions() bool { //nolint: 
 		txIDs = append(txIDs, "invalid-tx-id")
 
 		// discard
-		discardResultsStruct := s.api.DiscardTransactions(txIDs)
+		discardResultsStruct, errs := s.api.DiscardTransactions(txIDs)
 		discardResults := discardResultsStruct.Results
 
 		require.Equal(1, len(discardResults))
-		require.Equal(txqueue.ErrQueuedTxIDNotFound.Error(), discardResults["invalid-tx-id"].Error)
+		require.Equal(txqueue.ErrQueuedTxIDNotFound, errs["invalid-tx-id"])
 
 		// try completing discarded transaction
-		completeResultsStruct := s.api.CompleteTransactions(txIDs, TestConfig.Account1.Password)
+		completeResultsStruct, errs := s.api.CompleteTransactions(txIDs, TestConfig.Account1.Password)
 		completeResults := completeResultsStruct.Results
 
 		require.Equal(testTxCount+1, len(completeResults), "unexpected number of errors (call to CompleteTransaction should not succeed)")
@@ -680,7 +680,7 @@ func (s *APITestSuite) TestDiscardMultipleQueuedTransactions() bool { //nolint: 
 		for txID, txResult := range completeResults {
 			require.Equal(txResult.ID, txID, "tx id not set in result: expected id is %s", txID)
 
-			require.Equal(txqueue.ErrQueuedTxIDNotFound.Error(), txResult.Error, "invalid error for %s", txResult.Hash)
+			require.Equal(txqueue.ErrQueuedTxIDNotFound, errs[txID], "invalid error for %s", txResult.Hash)
 
 			require.Equal(gethcommon.Hash{}.Hex(), txResult.Hash, "invalid hash (expected zero): %s", txResult.Hash)
 

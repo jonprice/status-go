@@ -149,7 +149,14 @@ func CompleteTransactions(ids, password *C.char) *C.char {
 			Error: err.Error(),
 		}
 	} else {
-		result = statusAPI.CompleteTransactions(txIDs, C.GoString(password))
+		var errs map[common.QueuedTxID]error
+		result, errs = statusAPI.CompleteTransactions(txIDs, C.GoString(password))
+		for txID, err := range errs {
+			if err != nil {
+				log.Error("CompleteTransactions failed", "txID", txID, "error", err.Error())
+			}
+
+		}
 	}
 	outBytes, _ := json.Marshal(result)
 	return C.CString(string(outBytes))
@@ -179,7 +186,14 @@ func DiscardTransactions(ids *C.char) *C.char {
 			Error: err.Error(),
 		}
 	} else {
-		result = statusAPI.DiscardTransactions(txIDs)
+		var errs map[common.QueuedTxID]error
+		result, errs = statusAPI.DiscardTransactions(txIDs)
+
+		for txID, err := range errs {
+			if err != nil {
+				log.Error("DiscardTransactions failed", "txID", txID, "error", err.Error())
+			}
+		}
 	}
 
 	outBytes, _ := json.Marshal(result)

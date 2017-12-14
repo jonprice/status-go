@@ -186,10 +186,11 @@ func (mr *MocklibStatusAPIMockRecorder) CompleteTransaction(id, password interfa
 }
 
 // CompleteTransactions mocks base method
-func (m *MocklibStatusAPI) CompleteTransactions(ids []common0.QueuedTxID, password string) common0.CompleteTransactionsResult {
+func (m *MocklibStatusAPI) CompleteTransactions(ids []common0.QueuedTxID, password string) (common0.CompleteTransactionsResult, map[common0.QueuedTxID]error) {
 	ret := m.ctrl.Call(m, "CompleteTransactions", ids, password)
 	ret0, _ := ret[0].(common0.CompleteTransactionsResult)
-	return ret0
+	ret1, _ := ret[1].(map[common0.QueuedTxID]error)
+	return ret0, ret1
 }
 
 // CompleteTransactions indicates an expected call of CompleteTransactions
@@ -211,10 +212,11 @@ func (mr *MocklibStatusAPIMockRecorder) DiscardTransaction(id interface{}) *gomo
 }
 
 // DiscardTransactions mocks base method
-func (m *MocklibStatusAPI) DiscardTransactions(ids []common0.QueuedTxID) common0.DiscardTransactionsResult {
+func (m *MocklibStatusAPI) DiscardTransactions(ids []common0.QueuedTxID) (common0.DiscardTransactionsResult, map[common0.QueuedTxID]error) {
 	ret := m.ctrl.Call(m, "DiscardTransactions", ids)
 	ret0, _ := ret[0].(common0.DiscardTransactionsResult)
-	return ret0
+	ret1, _ := ret[1].(map[common0.QueuedTxID]error)
+	return ret0, ret1
 }
 
 // DiscardTransactions indicates an expected call of DiscardTransactions
@@ -581,10 +583,11 @@ func (mr *MocktransactionAPIMockRecorder) CompleteTransaction(id, password inter
 }
 
 // CompleteTransactions mocks base method
-func (m *MocktransactionAPI) CompleteTransactions(ids []common0.QueuedTxID, password string) common0.CompleteTransactionsResult {
+func (m *MocktransactionAPI) CompleteTransactions(ids []common0.QueuedTxID, password string) (common0.CompleteTransactionsResult, map[common0.QueuedTxID]error) {
 	ret := m.ctrl.Call(m, "CompleteTransactions", ids, password)
 	ret0, _ := ret[0].(common0.CompleteTransactionsResult)
-	return ret0
+	ret1, _ := ret[1].(map[common0.QueuedTxID]error)
+	return ret0, ret1
 }
 
 // CompleteTransactions indicates an expected call of CompleteTransactions
@@ -606,10 +609,11 @@ func (mr *MocktransactionAPIMockRecorder) DiscardTransaction(id interface{}) *go
 }
 
 // DiscardTransactions mocks base method
-func (m *MocktransactionAPI) DiscardTransactions(ids []common0.QueuedTxID) common0.DiscardTransactionsResult {
+func (m *MocktransactionAPI) DiscardTransactions(ids []common0.QueuedTxID) (common0.DiscardTransactionsResult, map[common0.QueuedTxID]error) {
 	ret := m.ctrl.Call(m, "DiscardTransactions", ids)
 	ret0, _ := ret[0].(common0.DiscardTransactionsResult)
-	return ret0
+	ret1, _ := ret[1].(map[common0.QueuedTxID]error)
+	return ret0, ret1
 }
 
 // DiscardTransactions indicates an expected call of DiscardTransactions

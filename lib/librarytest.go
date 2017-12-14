@@ -302,15 +302,15 @@ func testCompleteTransactionsWithMock(t *testing.T) {
 	statusAPI = status
 	status.EXPECT().CompleteTransactions([]common.QueuedTxID{"id1"}, "pass1").Return(
 		common.CompleteTransactionsResult{
-			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id1": {ID: "id1", Hash: "0x123"}}})
+			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id1": {ID: "id1", Hash: "0x123"}}}, map[common.QueuedTxID]error{"id1": nil})
 
 	status.EXPECT().CompleteTransactions([]common.QueuedTxID{"id2"}, "pass2").Return(
 		common.CompleteTransactionsResult{
-			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id2": {ID: "id2", Hash: "", Error: "test error"}}})
+			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id2": {ID: "id2", Hash: "", Error: "test error"}}}, map[common.QueuedTxID]error{"id2": fmt.Errorf("test error")})
 
 	status.EXPECT().CompleteTransactions([]common.QueuedTxID{"id3", "id4"}, "pass2").Return(
 		common.CompleteTransactionsResult{
-			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id3": {ID: "id3", Hash: "0x456", Error: ""}, "id4": {ID: "id4", Hash: "0x789", Error: ""}}})
+			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id3": {ID: "id3", Hash: "0x456", Error: ""}, "id4": {ID: "id4", Hash: "0x789", Error: ""}}}, map[common.QueuedTxID]error{"id3": nil, "id4": nil})
 
 	// C Strings
 	id1 := C.CString(`["id1"]`)
@@ -420,15 +420,15 @@ func testDiscardTransactionsWithMock(t *testing.T) {
 	statusAPI = status
 	status.EXPECT().DiscardTransactions([]common.QueuedTxID{"id1"}).Return(
 		common.DiscardTransactionsResult{
-			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id1": {ID: "id1"}}})
+			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id1": {ID: "id1"}}}, map[common.QueuedTxID]error{"id1": nil})
 
 	status.EXPECT().DiscardTransactions([]common.QueuedTxID{"id2"}).Return(
 		common.DiscardTransactionsResult{
-			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id2": {ID: "id2", Error: "test error"}}})
+			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id2": {ID: "id2", Error: "test error"}}}, map[common.QueuedTxID]error{"id2": fmt.Errorf("test error")})
 
 	status.EXPECT().DiscardTransactions([]common.QueuedTxID{"id3", "id4"}).Return(
 		common.DiscardTransactionsResult{
-			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id3": {ID: "id3", Error: ""}, "id4": {ID: "id4", Error: ""}}})
+			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id3": {ID: "id3", Error: ""}, "id4": {ID: "id4", Error: ""}}}, map[common.QueuedTxID]error{"id3": nil, "id4": nil})
 
 	// C Strings
 	id1 := C.CString(`["id1"]`)

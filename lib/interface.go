@@ -38,9 +38,9 @@ type accountAPI interface {
 
 type transactionAPI interface {
 	CompleteTransaction(id common.QueuedTxID, password string) (common.CompleteTransactionResult, error)
-	CompleteTransactions(ids []common.QueuedTxID, password string) common.CompleteTransactionsResult
+	CompleteTransactions(ids []common.QueuedTxID, password string) (common.CompleteTransactionsResult, map[common.QueuedTxID]error)
 	DiscardTransaction(id common.QueuedTxID) (common.DiscardTransactionResult, error)
-	DiscardTransactions(ids []common.QueuedTxID) common.DiscardTransactionsResult
+	DiscardTransactions(ids []common.QueuedTxID) (common.DiscardTransactionsResult, map[common.QueuedTxID]error)
 	TxQueueManager() common.TxQueueManager
 	SendTransaction(ctx context.Context, args common.SendTxArgs) (gethcommon.Hash, error)
 }
