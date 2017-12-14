@@ -200,23 +200,74 @@ func (api *StatusAPI) SendTransaction(ctx context.Context, args common.SendTxArg
 }
 
 // CompleteTransaction instructs backend to complete sending of a given transaction
-func (api *StatusAPI) CompleteTransaction(id common.QueuedTxID, password string) (gethcommon.Hash, error) {
-	return api.b.txQueueManager.CompleteTransaction(id, password)
+func (api *StatusAPI) CompleteTransaction(id common.QueuedTxID, password string) (common.CompleteTransactionResult, error) {
+	hash, err := api.b.txQueueManager.CompleteTransaction(id, password)
+
+	if err != nil {
+		return common.CompleteTransactionResult{
+			ID:    id,
+			Error: err.Error(),
+		}, err
+	}
+	return common.CompleteTransactionResult{
+		ID:   id,
+		Hash: hash.Hex(),
+	}, nil
+
 }
 
 // CompleteTransactions instructs backend to complete sending of multiple transactions
-func (api *StatusAPI) CompleteTransactions(ids []common.QueuedTxID, password string) map[common.QueuedTxID]common.RawCompleteTransactionResult {
-	return api.b.txQueueManager.CompleteTransactions(ids, password)
+func (api *StatusAPI) CompleteTransactions(ids []common.QueuedTxID, password string) (common.CompleteTransactionsResult, map[common.QueuedTxID]error) {
+	out := common.CompleteTransactionsResult{Results: make(map[common.QueuedTxID]common.CompleteTransactionResult)}
+	errors := make(map[common.QueuedTxID]error)
+
+	for txID, result := range api.b.txQueueManager.CompleteTransactions(ids, password) {
+		txResult := common.CompleteTransactionResult{
+			ID:   txID,
+			Hash: result.Hash.Hex(),
+		}
+		if result.Error != nil {
+			txResult.Error = result.Error.Error()
+		}
+		out.Results[txID] = txResult
+		errors[txID] = result.Error
+	}
+
+	return out, errors
+
 }
 
 // DiscardTransaction discards a given transaction from transaction queue
-func (api *StatusAPI) DiscardTransaction(id common.QueuedTxID) error {
-	return api.b.txQueueManager.DiscardTransaction(id)
+func (api *StatusAPI) DiscardTransaction(id common.QueuedTxID) (common.DiscardTransactionResult, error) {
+	err := api.b.txQueueManager.DiscardTransaction(id)
+	if err != nil {
+		return common.DiscardTransactionResult{
+			ID:    id,
+			Error: err.Error(),
+		}, err
+	}
+
+	return common.DiscardTransactionResult{
+		ID: id,
+	}, nil
 }
 
 // DiscardTransactions discards given multiple transactions from transaction queue
-func (api *StatusAPI) DiscardTransactions(ids []common.QueuedTxID) map[common.QueuedTxID]common.RawDiscardTransactionResult {
-	return api.b.txQueueManager.DiscardTransactions(ids)
+func (api *StatusAPI) DiscardTransactions(ids []common.QueuedTxID) (common.DiscardTransactionsResult, map[common.QueuedTxID]error) {
+	out := common.DiscardTransactionsResult{Results: make(map[common.QueuedTxID]common.DiscardTransactionResult)}
+	errors := make(map[common.QueuedTxID]error)
+	for txID, result := range api.b.txQueueManager.DiscardTransactions(ids) {
+		txResult := common.DiscardTransactionResult{
+			ID: txID,
+		}
+		if result.Error != nil {
+			txResult.Error = result.Error.Error()
+		}
+		out.Results[txID] = txResult
+		errors[txID] = result.Error
+	}
+
+	return out, errors
 }
 
 // JailParse creates a new jail cell context, with the given chatID as identifier.

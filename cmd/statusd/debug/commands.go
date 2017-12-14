@@ -175,9 +175,9 @@ func (cs *commandSet) Logout() error {
 
 // CompleteTransaction instructs API to complete sending of a given transaction.
 func (cs *commandSet) CompleteTransaction(id, password string) (string, error) {
-	txHash, err := cs.statusAPI.CompleteTransaction(common.QueuedTxID(id), password)
+	completeTransactionResult, err := cs.statusAPI.CompleteTransaction(common.QueuedTxID(id), password)
 	if err != nil {
 		return "", err
 	}
-	return txHash.String(), nil
+	return completeTransactionResult.Hash, nil
 }

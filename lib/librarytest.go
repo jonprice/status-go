@@ -205,7 +205,6 @@ func testValidateNodeConfigWithMock(t *testing.T) {
 	status.EXPECT().ValidateJSONConfig("").Return(apiDetailedResponse3).AnyTimes()
 
 	// C Strings
-	//TODO should the CStrings be C.free
 	config1 := C.CString("{json1}")
 	config2 := C.CString("{json2}")
 	empty := C.CString("")
@@ -240,4 +239,240 @@ func testValidateNodeConfigWithMock(t *testing.T) {
 		})
 	}
 
+}
+
+func testCompleteTransactionWithMock(t *testing.T) {
+	realStatusAPI := statusAPI
+	defer func() { statusAPI = realStatusAPI }()
+
+	// Setup Mock StatusAPI
+	ctrl := gomock.NewController(t)
+	status := NewMocklibStatusAPI(ctrl)
+	statusAPI = status
+	status.EXPECT().CompleteTransaction(common.QueuedTxID("id1"), "pass1").Return(common.CompleteTransactionResult{ID: "id1", Hash: "0x123"}, nil)
+	status.EXPECT().CompleteTransaction(common.QueuedTxID(""), "").Return(common.CompleteTransactionResult{ID: "id1", Hash: "0x123"}, nil).AnyTimes()
+	status.EXPECT().CompleteTransaction(common.QueuedTxID("id2"), "pass2").Return(common.CompleteTransactionResult{ID: "id2", Error: "Test Error"}, fmt.Errorf("Test Error"))
+
+	// C Strings
+	id1 := C.CString("id1")
+	pass1 := C.CString("pass1")
+	id2 := C.CString("id2")
+	pass2 := C.CString("pass2")
+	empty := C.CString("")
+	completeTransactionResult1JSON := C.CString(`{"id":"id1","hash":"0x123","error":""}`)
+	completeTransactionResult2JSON := C.CString(`{"id":"id2","hash":"","error":"Test Error"}`)
+	defer func() {
+		C.free(unsafe.Pointer(id1))
+		C.free(unsafe.Pointer(pass1))
+		C.free(unsafe.Pointer(id2))
+		C.free(unsafe.Pointer(pass2))
+		C.free(unsafe.Pointer(empty))
+		C.free(unsafe.Pointer(completeTransactionResult1JSON))
+		C.free(unsafe.Pointer(completeTransactionResult2JSON))
+
+	}()
+
+	tests := []struct {
+		name     string
+		id       *C.char
+		password *C.char
+		want     *C.char
+	}{
+		{"testCompleteTransactionWithMock/Normal", id1, pass1, completeTransactionResult1JSON},
+		{"testCompleteTransactionWithMock/Empty", empty, empty, completeTransactionResult1JSON},
+		{"testCompleteTransactionWithMock/Nil", nil, nil, completeTransactionResult1JSON},
+		{"testCompleteTransactionWithMock/Error", id2, pass2, completeTransactionResult2JSON},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CompleteTransaction(tt.id, tt.password); C.GoString(got) != C.GoString(tt.want) {
+				assert.Equal(t, C.GoString(tt.want), C.GoString(got))
+			}
+		})
+	}
+}
+
+func testCompleteTransactionsWithMock(t *testing.T) {
+	realStatusAPI := statusAPI
+	defer func() { statusAPI = realStatusAPI }()
+
+	// Setup Mock StatusAPI
+	ctrl := gomock.NewController(t)
+	status := NewMocklibStatusAPI(ctrl)
+	statusAPI = status
+	status.EXPECT().CompleteTransactions([]common.QueuedTxID{"id1"}, "pass1").Return(
+		common.CompleteTransactionsResult{
+			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id1": {ID: "id1", Hash: "0x123"}}}, map[common.QueuedTxID]error{"id1": nil})
+
+	status.EXPECT().CompleteTransactions([]common.QueuedTxID{"id2"}, "pass2").Return(
+		common.CompleteTransactionsResult{
+			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id2": {ID: "id2", Hash: "", Error: "test error"}}}, map[common.QueuedTxID]error{"id2": fmt.Errorf("test error")})
+
+	status.EXPECT().CompleteTransactions([]common.QueuedTxID{"id3", "id4"}, "pass2").Return(
+		common.CompleteTransactionsResult{
+			Results: map[common.QueuedTxID]common.CompleteTransactionResult{"id3": {ID: "id3", Hash: "0x456", Error: ""}, "id4": {ID: "id4", Hash: "0x789", Error: ""}}}, map[common.QueuedTxID]error{"id3": nil, "id4": nil})
+
+	// C Strings
+	id1 := C.CString(`["id1"]`)
+	pass1 := C.CString("pass1")
+	invalidJSON := C.CString(`id`)
+	id2 := C.CString(`["id2"]`)
+	pass2 := C.CString("pass2")
+	id3 := C.CString(`["id3", "id4"]`)
+	empty := C.CString("")
+	completeTransactionResult1JSON := C.CString(`{"results": {"id1": {"id":"id1","hash":"0x123","error":""}}}`)
+	completeTransactionResult2JSON := C.CString(`{"results": {"none": {"id":"","hash":"","error":"invalid character 'i' looking for beginning of value"}}}`)
+	completeTransactionResult3JSON := C.CString(`{"results": {"none": {"id":"","hash":"","error":"unexpected end of JSON input"}}}`)
+	completeTransactionResult4JSON := C.CString(`{"results": {"id2": {"id":"id2","hash":"","error":"test error"}}}`)
+	completeTransactionResult5JSON := C.CString(`{"results": {"id3": {"id":"id3","hash":"0x456","error":""}, "id4": {"id":"id4","hash":"0x789","error":""}}}`)
+
+	defer func() {
+		C.free(unsafe.Pointer(id1))
+		C.free(unsafe.Pointer(pass1))
+		C.free(unsafe.Pointer(invalidJSON))
+		C.free(unsafe.Pointer(id2))
+		C.free(unsafe.Pointer(pass2))
+		C.free(unsafe.Pointer(id3))
+		C.free(unsafe.Pointer(empty))
+		C.free(unsafe.Pointer(completeTransactionResult1JSON))
+		C.free(unsafe.Pointer(completeTransactionResult2JSON))
+		C.free(unsafe.Pointer(completeTransactionResult3JSON))
+		C.free(unsafe.Pointer(completeTransactionResult4JSON))
+		C.free(unsafe.Pointer(completeTransactionResult5JSON))
+
+	}()
+
+	tests := []struct {
+		name     string
+		ids      *C.char
+		password *C.char
+		want     *C.char
+	}{
+		{"testCompleteTransactionsWithMock/Normal", id1, pass1, completeTransactionResult1JSON},
+		{"testCompleteTransactionsWithMock/InvalidJSON", invalidJSON, pass1, completeTransactionResult2JSON},
+		{"testCompleteTransactionWithMock/Empty", empty, empty, completeTransactionResult3JSON},
+		{"testCompleteTransactionWithMock/Nil", nil, nil, completeTransactionResult3JSON},
+		{"testCompleteTransactionWithMock/Error", id2, pass2, completeTransactionResult4JSON},
+		{"testCompleteTransactionWithMock/2ID", id3, pass2, completeTransactionResult5JSON},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CompleteTransactions(tt.ids, tt.password); C.GoString(got) != C.GoString(tt.want) {
+				assert.JSONEq(t, C.GoString(tt.want), C.GoString(got))
+			}
+		})
+	}
+}
+
+func testDiscardTransactionWithMock(t *testing.T) {
+	realStatusAPI := statusAPI
+	defer func() { statusAPI = realStatusAPI }()
+
+	// Setup Mock StatusAPI
+	ctrl := gomock.NewController(t)
+	status := NewMocklibStatusAPI(ctrl)
+	statusAPI = status
+	status.EXPECT().DiscardTransaction(common.QueuedTxID("id1")).Return(common.DiscardTransactionResult{ID: "id1"}, nil)
+	status.EXPECT().DiscardTransaction(common.QueuedTxID("")).Return(common.DiscardTransactionResult{ID: "id1"}, nil).AnyTimes()
+	status.EXPECT().DiscardTransaction(common.QueuedTxID("id2")).Return(common.DiscardTransactionResult{ID: "id2", Error: "Test Error"}, fmt.Errorf("Test Error"))
+
+	// C Strings
+	id1 := C.CString("id1")
+	id2 := C.CString("id2")
+	empty := C.CString("")
+	discardTransactionResult1JSON := C.CString(`{"id":"id1","error":""}`)
+	discardTransactionResult2JSON := C.CString(`{"id":"id2","error":"Test Error"}`)
+	defer func() {
+		C.free(unsafe.Pointer(id1))
+		C.free(unsafe.Pointer(id2))
+		C.free(unsafe.Pointer(empty))
+		C.free(unsafe.Pointer(discardTransactionResult1JSON))
+		C.free(unsafe.Pointer(discardTransactionResult2JSON))
+
+	}()
+
+	tests := []struct {
+		name string
+		id   *C.char
+		want *C.char
+	}{
+		{"testDiscardTransactionWithMock/Normal", id1, discardTransactionResult1JSON},
+		{"testDiscardTransactionWithMock/Empty", empty, discardTransactionResult1JSON},
+		{"testDiscardTransactionWithMock/Nil", nil, discardTransactionResult1JSON},
+		{"testDiscardTransactionWithMock/Error", id2, discardTransactionResult2JSON},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DiscardTransaction(tt.id); C.GoString(got) != C.GoString(tt.want) {
+				assert.Equal(t, C.GoString(tt.want), C.GoString(got))
+			}
+		})
+	}
+}
+
+func testDiscardTransactionsWithMock(t *testing.T) {
+	realStatusAPI := statusAPI
+	defer func() { statusAPI = realStatusAPI }()
+
+	// Setup Mock StatusAPI
+	ctrl := gomock.NewController(t)
+	status := NewMocklibStatusAPI(ctrl)
+	statusAPI = status
+	status.EXPECT().DiscardTransactions([]common.QueuedTxID{"id1"}).Return(
+		common.DiscardTransactionsResult{
+			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id1": {ID: "id1"}}}, map[common.QueuedTxID]error{"id1": nil})
+
+	status.EXPECT().DiscardTransactions([]common.QueuedTxID{"id2"}).Return(
+		common.DiscardTransactionsResult{
+			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id2": {ID: "id2", Error: "test error"}}}, map[common.QueuedTxID]error{"id2": fmt.Errorf("test error")})
+
+	status.EXPECT().DiscardTransactions([]common.QueuedTxID{"id3", "id4"}).Return(
+		common.DiscardTransactionsResult{
+			Results: map[common.QueuedTxID]common.DiscardTransactionResult{"id3": {ID: "id3", Error: ""}, "id4": {ID: "id4", Error: ""}}}, map[common.QueuedTxID]error{"id3": nil, "id4": nil})
+
+	// C Strings
+	id1 := C.CString(`["id1"]`)
+	invalidJSON := C.CString(`id`)
+	id2 := C.CString(`["id2"]`)
+	id3 := C.CString(`["id3", "id4"]`)
+	empty := C.CString("")
+	discardTransactionResult1JSON := C.CString(`{"results": {"id1": {"id":"id1","error":""}}}`)
+	discardTransactionResult2JSON := C.CString(`{"results": {"none": {"id":"","error":"invalid character 'i' looking for beginning of value"}}}`)
+	discardTransactionResult3JSON := C.CString(`{"results": {"none": {"id":"","error":"unexpected end of JSON input"}}}`)
+	discardTransactionResult4JSON := C.CString(`{"results": {"id2": {"id":"id2","error":"test error"}}}`)
+	discardTransactionResult5JSON := C.CString(`{"results": {"id3": {"id":"id3","error":""}, "id4": {"id":"id4","error":""}}}`)
+
+	defer func() {
+		C.free(unsafe.Pointer(id1))
+		C.free(unsafe.Pointer(invalidJSON))
+		C.free(unsafe.Pointer(id2))
+		C.free(unsafe.Pointer(id3))
+		C.free(unsafe.Pointer(empty))
+		C.free(unsafe.Pointer(discardTransactionResult1JSON))
+		C.free(unsafe.Pointer(discardTransactionResult2JSON))
+		C.free(unsafe.Pointer(discardTransactionResult3JSON))
+		C.free(unsafe.Pointer(discardTransactionResult4JSON))
+		C.free(unsafe.Pointer(discardTransactionResult5JSON))
+
+	}()
+
+	tests := []struct {
+		name string
+		ids  *C.char
+		want *C.char
+	}{
+		{"testDiscardTransactionsWithMock/Normal", id1, discardTransactionResult1JSON},
+		{"testDiscardTransactionsWithMock/InvalidJSON", invalidJSON, discardTransactionResult2JSON},
+		{"testDiscardTransactionWithMock/Empty", empty, discardTransactionResult3JSON},
+		{"testDiscardTransactionWithMock/Nil", nil, discardTransactionResult3JSON},
+		{"testDiscardTransactionWithMock/Error", id2, discardTransactionResult4JSON},
+		{"testDiscardTransactionWithMock/2ID", id3, discardTransactionResult5JSON},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DiscardTransactions(tt.ids); C.GoString(got) != C.GoString(tt.want) {
+				assert.JSONEq(t, C.GoString(tt.want), C.GoString(got))
+			}
+		})
+	}
 }

@@ -129,126 +129,74 @@ func Logout() *C.char {
 //CompleteTransaction instructs backend to complete sending of a given transaction
 //export CompleteTransaction
 func CompleteTransaction(id, password *C.char) *C.char {
-	txHash, err := statusAPI.CompleteTransaction(common.QueuedTxID(C.GoString(id)), C.GoString(password))
-
-	errString := ""
+	completeTransactionResult, err := statusAPI.CompleteTransaction(common.QueuedTxID(C.GoString(id)), C.GoString(password))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		errString = err.Error()
+		log.Error("CompleteTransaction failed", "error", err.Error())
 	}
-
-	out := common.CompleteTransactionResult{
-		ID:    C.GoString(id),
-		Hash:  txHash.Hex(),
-		Error: errString,
-	}
-	outBytes, err := json.Marshal(out)
-	if err != nil {
-		log.Error("failed to marshal CompleteTransaction output", "error", err.Error())
-		return makeJSONResponse(err)
-	}
-
+	outBytes, _ := json.Marshal(completeTransactionResult)
 	return C.CString(string(outBytes))
 }
 
 //CompleteTransactions instructs backend to complete sending of multiple transactions
 //export CompleteTransactions
 func CompleteTransactions(ids, password *C.char) *C.char {
-	out := common.CompleteTransactionsResult{}
-	out.Results = make(map[string]common.CompleteTransactionResult)
-
-	parsedIDs, err := common.ParseJSONArray(C.GoString(ids))
+	txIDs := []common.QueuedTxID{}
+	err := json.Unmarshal([]byte(C.GoString(ids)), &txIDs)
+	var result common.CompleteTransactionsResult
 	if err != nil {
-		out.Results["none"] = common.CompleteTransactionResult{
+		result = common.CompleteTransactionsResult{Results: make(map[common.QueuedTxID]common.CompleteTransactionResult)}
+		result.Results["none"] = common.CompleteTransactionResult{
 			Error: err.Error(),
 		}
 	} else {
-		txIDs := make([]common.QueuedTxID, len(parsedIDs))
-		for i, id := range parsedIDs {
-			txIDs[i] = common.QueuedTxID(id)
-		}
+		var errs map[common.QueuedTxID]error
+		result, errs = statusAPI.CompleteTransactions(txIDs, C.GoString(password))
+		for txID, err := range errs {
+			if err != nil {
+				log.Error("CompleteTransactions failed", "txID", txID, "error", err.Error())
+			}
 
-		results := statusAPI.CompleteTransactions(txIDs, C.GoString(password))
-		for txID, result := range results {
-			txResult := common.CompleteTransactionResult{
-				ID:   string(txID),
-				Hash: result.Hash.Hex(),
-			}
-			if result.Error != nil {
-				txResult.Error = result.Error.Error()
-			}
-			out.Results[string(txID)] = txResult
 		}
 	}
-
-	outBytes, err := json.Marshal(out)
-	if err != nil {
-		log.Error("failed to marshal CompleteTransactions output", "error", err.Error())
-		return makeJSONResponse(err)
-	}
-
+	outBytes, _ := json.Marshal(result)
 	return C.CString(string(outBytes))
 }
 
 //DiscardTransaction discards a given transaction from transaction queue
 //export DiscardTransaction
 func DiscardTransaction(id *C.char) *C.char {
-	err := statusAPI.DiscardTransaction(common.QueuedTxID(C.GoString(id)))
-
-	errString := ""
+	out, err := statusAPI.DiscardTransaction(common.QueuedTxID(C.GoString(id)))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		errString = err.Error()
+		log.Error("DiscardTransaction failed", "error", err.Error())
 	}
-
-	out := common.DiscardTransactionResult{
-		ID:    C.GoString(id),
-		Error: errString,
-	}
-	outBytes, err := json.Marshal(out)
-	if err != nil {
-		log.Error("failed to marshal DiscardTransaction output", "error", err.Error())
-		return makeJSONResponse(err)
-	}
-
+	outBytes, _ := json.Marshal(out)
 	return C.CString(string(outBytes))
 }
 
 //DiscardTransactions discards given multiple transactions from transaction queue
 //export DiscardTransactions
 func DiscardTransactions(ids *C.char) *C.char {
-	out := common.DiscardTransactionsResult{}
-	out.Results = make(map[string]common.DiscardTransactionResult)
 
-	parsedIDs, err := common.ParseJSONArray(C.GoString(ids))
+	txIDs := []common.QueuedTxID{}
+	err := json.Unmarshal([]byte(C.GoString(ids)), &txIDs)
+	var result common.DiscardTransactionsResult
 	if err != nil {
-		out.Results["none"] = common.DiscardTransactionResult{
+		result = common.DiscardTransactionsResult{Results: make(map[common.QueuedTxID]common.DiscardTransactionResult)}
+		result.Results["none"] = common.DiscardTransactionResult{
 			Error: err.Error(),
 		}
 	} else {
-		txIDs := make([]common.QueuedTxID, len(parsedIDs))
-		for i, id := range parsedIDs {
-			txIDs[i] = common.QueuedTxID(id)
-		}
+		var errs map[common.QueuedTxID]error
+		result, errs = statusAPI.DiscardTransactions(txIDs)
 
-		results := statusAPI.DiscardTransactions(txIDs)
-		for txID, result := range results {
-			txResult := common.DiscardTransactionResult{
-				ID: string(txID),
+		for txID, err := range errs {
+			if err != nil {
+				log.Error("DiscardTransactions failed", "txID", txID, "error", err.Error())
 			}
-			if result.Error != nil {
-				txResult.Error = result.Error.Error()
-			}
-			out.Results[string(txID)] = txResult
 		}
 	}
 
-	outBytes, err := json.Marshal(out)
-	if err != nil {
-		log.Error("failed to marshal DiscardTransactions output", "error", err.Error())
-		return makeJSONResponse(err)
-	}
-
+	outBytes, _ := json.Marshal(result)
 	return C.CString(string(outBytes))
 }
 

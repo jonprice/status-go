@@ -1,19 +1,26 @@
 package api_test
 
 import (
+	"context"
+	"encoding/json"
 	"io/ioutil"
+	"math/big"
 	"math/rand"
 	"os"
 	"strconv"
 	"testing"
 	"time"
 
+	gethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/status-im/status-go/e2e"
 	"github.com/status-im/status-go/geth/account"
 	"github.com/status-im/status-go/geth/api"
 	"github.com/status-im/status-go/geth/common"
 	"github.com/status-im/status-go/geth/log"
 	"github.com/status-im/status-go/geth/params"
+	"github.com/status-im/status-go/geth/signal"
+	"github.com/status-im/status-go/geth/txqueue"
 	. "github.com/status-im/status-go/testing"
 	"github.com/stretchr/testify/suite"
 )
@@ -326,6 +333,390 @@ func (s *APITestSuite) TestRecoverAccount() bool {
 
 	hasKeyPair = whisperService.HasKeyPair(pubKeyCheck)
 	require.True(hasKeyPair, "identity not injected into whisper: %v", err)
+
+	return true
+}
+
+func (s *APITestSuite) TestCompleteTransaction() bool {
+	require := s.Require()
+
+	config, err := e2e.MakeTestNodeConfig(GetNetworkID())
+	require.NoError(err)
+	err = s.api.StartNode(config)
+	require.NoError(err)
+	defer s.api.StopNode() //nolint: errcheck
+
+	txQueueManager := s.api.TxQueueManager()
+	txQueue := txQueueManager.TransactionQueue()
+
+	txQueue.Reset()
+	EnsureNodeSync(s.api.NodeManager())
+
+	// log into account from which transactions will be sent
+	err = s.api.SelectAccount(TestConfig.Account1.Address, TestConfig.Account1.Password)
+	require.NoError(err, "cannot select account: %v. Error %q", TestConfig.Account1.Address, err)
+
+	// make sure you panic if transaction complete doesn't return
+	queuedTxCompleted := make(chan struct{}, 1)
+	abortPanic := make(chan struct{}, 1)
+	common.PanicAfter(10*time.Second, abortPanic, "testCompleteTransaction")
+
+	// replace transaction notification handler
+	var txHash = ""
+	signal.SetDefaultNodeNotificationHandler(func(jsonEvent string) {
+		var envelope signal.Envelope
+		err := json.Unmarshal([]byte(jsonEvent), &envelope)
+		require.NoError(err, "cannot unmarshal event's JSON: %s. Error %q", jsonEvent, err)
+		if envelope.Type == txqueue.EventTransactionQueued {
+			event := envelope.Event.(map[string]interface{})
+			s.T().Logf("transaction queued (will be completed shortly): {id: %s}\n", event["id"].(string))
+
+			completeTxResponse := common.CompleteTransactionResult{}
+			completeTxResponse, err := s.api.CompleteTransaction(common.QueuedTxID(event["id"].(string)), TestConfig.Account1.Password)
+			require.NoError(err, "cannot complete queued transaction[%v]: %v", event["id"], completeTxResponse.Error)
+
+			txHash = completeTxResponse.Hash
+
+			s.T().Logf("transaction complete: https://testnet.etherscan.io/tx/%s", txHash)
+			abortPanic <- struct{}{} // so that timeout is aborted
+			queuedTxCompleted <- struct{}{}
+		}
+	})
+
+	// this call blocks, up until Complete Transaction is called
+	txCheckHash, err := s.api.SendTransaction(context.TODO(), common.SendTxArgs{
+		From:  common.FromAddress(TestConfig.Account1.Address),
+		To:    common.ToAddress(TestConfig.Account2.Address),
+		Value: (*hexutil.Big)(big.NewInt(1000000000000)),
+	})
+	require.NoError(err, "Failed to SendTransaction: %s", err)
+
+	<-queuedTxCompleted // make sure that complete transaction handler completes its magic, before we proceed
+
+	require.Equal(txCheckHash.Hex(), txHash, "Transaction hash returned from SendTransaction is invalid: expected %s, got %s",
+		txCheckHash.Hex(), txHash)
+
+	require.NotEqual(gethcommon.Hash{}, txCheckHash, "Test failed: transaction was never queued or completed")
+
+	require.Equal(0, txQueue.Count(), "tx queue must be empty at this point")
+
+	return true
+}
+
+func (s *APITestSuite) TestCompleteMultipleQueuedTransactions() bool { //nolint: gocyclo
+	require := s.Require()
+	config, err := e2e.MakeTestNodeConfig(GetNetworkID())
+	require.NoError(err)
+	err = s.api.StartNode(config)
+	require.NoError(err)
+	defer s.api.StopNode() //nolint: errcheck
+
+	txQueue := s.api.TxQueueManager().TransactionQueue()
+	txQueue.Reset()
+
+	// log into account from which transactions will be sent
+	err = s.api.SelectAccount(TestConfig.Account1.Address, TestConfig.Account1.Password)
+	require.NoError(err, "cannot select account: %v", TestConfig.Account1.Address)
+
+	// make sure you panic if transaction complete doesn't return
+	testTxCount := 3
+	txIDs := make(chan common.QueuedTxID, testTxCount)
+	allTestTxCompleted := make(chan struct{}, 1)
+
+	// replace transaction notification handler
+	signal.SetDefaultNodeNotificationHandler(func(jsonEvent string) {
+		var txID common.QueuedTxID
+		var envelope signal.Envelope
+		err := json.Unmarshal([]byte(jsonEvent), &envelope)
+		require.NoError(err, "cannot unmarshal event's JSON: %s", jsonEvent)
+
+		if envelope.Type == txqueue.EventTransactionQueued {
+			event := envelope.Event.(map[string]interface{})
+			txID = common.QueuedTxID(event["id"].(string))
+			s.T().Logf("transaction queued (will be completed in a single call, once aggregated): {id: %s}\n", txID)
+			txIDs <- txID
+		}
+	})
+
+	//  this call blocks, and should return when DiscardQueuedTransaction() for a given tx id is called
+	sendTx := func() {
+		txHashCheck, err := s.api.SendTransaction(context.TODO(), common.SendTxArgs{
+			From:  common.FromAddress(TestConfig.Account1.Address),
+			To:    common.ToAddress(TestConfig.Account2.Address),
+			Value: (*hexutil.Big)(big.NewInt(1000000000000)),
+		})
+		require.NoError(err, "unexpected error: %v", err)
+
+		require.NotEqual(gethcommon.Hash{}, txHashCheck, "transaction returned empty has")
+
+	}
+
+	// wait for transactions, and complete them in a single call
+	completeTxs := func(txIDs []common.QueuedTxID) {
+		txIDs = append(txIDs, "invalid-tx-id")
+
+		// complete
+		resultsStruct, errs := s.api.CompleteTransactions(txIDs, TestConfig.Account1.Password)
+		results := resultsStruct.Results
+
+		require.Len(results, testTxCount+1)
+		require.Equal(errs[common.QueuedTxID("invalid-tx-id")], txqueue.ErrQueuedTxIDNotFound)
+
+		for txID, txResult := range results {
+			if txID == common.QueuedTxID("invalid-tx-id") {
+				continue
+			}
+
+			require.Equal(txResult.ID, txID, "tx id not set in result: expected id is %s", txID)
+			require.Equal("", txResult.Error, "invalid error for %s", txID)
+
+			require.NotEqual(gethcommon.Hash{}.Hex(), txResult.Hash, "invalid hash (expected non empty hash): %s", txID)
+
+			s.T().Logf("transaction complete: https://testnet.etherscan.io/tx/%s", txResult.Hash)
+		}
+
+		time.Sleep(1 * time.Second) // make sure that tx complete signal propagates
+		for _, txID := range txIDs {
+			require.False(txQueue.Has(txID), "txqueue should not have test tx at this point (it should be completed): %s", txID)
+		}
+	}
+	go func() {
+		ids := make([]common.QueuedTxID, testTxCount)
+		for i := 0; i < testTxCount; i++ {
+			ids[i] = <-txIDs
+		}
+
+		completeTxs(ids)
+		close(allTestTxCompleted)
+	}()
+
+	// send multiple transactions
+	for i := 0; i < testTxCount; i++ {
+		go sendTx()
+	}
+
+	select {
+	case <-allTestTxCompleted:
+		// pass
+	case <-time.After(20 * time.Second):
+
+		s.Fail("test timed out")
+		return false
+	}
+
+	if txQueue.Count() != 0 {
+		s.Fail("tx queue must be empty at this point")
+		return false
+	}
+
+	return true
+}
+
+func (s *APITestSuite) TestDiscardTransaction() bool { //nolint: gocyclo
+	require := s.Require()
+	config, err := e2e.MakeTestNodeConfig(GetNetworkID())
+	require.NoError(err)
+	err = s.api.StartNode(config)
+	require.NoError(err)
+	defer s.api.StopNode() //nolint: errcheck
+
+	txQueue := s.api.TxQueueManager().TransactionQueue()
+	txQueue.Reset()
+
+	// log into account from which transactions will be sent
+	err = s.api.SelectAccount(TestConfig.Account1.Address, TestConfig.Account1.Password)
+	require.NoError(err, "cannot select account: %v", TestConfig.Account1.Address)
+
+	// make sure you panic if transaction complete doesn't return
+	completeQueuedTransaction := make(chan struct{}, 1)
+	common.PanicAfter(20*time.Second, completeQueuedTransaction, "testDiscardTransaction")
+
+	// replace transaction notification handler
+	var txID common.QueuedTxID
+	txFailedEventCalled := false
+	signal.SetDefaultNodeNotificationHandler(func(jsonEvent string) {
+		var envelope signal.Envelope
+		err := json.Unmarshal([]byte(jsonEvent), &envelope)
+		require.NoError(err, "cannot unmarshal event's JSON: %s", jsonEvent)
+
+		if envelope.Type == txqueue.EventTransactionQueued {
+			event := envelope.Event.(map[string]interface{})
+			txID = common.QueuedTxID(event["id"].(string))
+			s.T().Logf("transaction queued (will be discarded soon): {id: %s}\n", txID)
+
+			require.True(txQueue.Has(common.QueuedTxID(txID)), "txqueue should still have test tx: %s", txID)
+
+			// discard
+			discardResponse, err := s.api.DiscardTransaction(txID)
+			require.NoError(err, "cannot discard tx: %v", discardResponse.Error)
+
+			// try completing discarded transaction
+			_, err = s.api.CompleteTransaction(txID, TestConfig.Account1.Password)
+			require.Equal(txqueue.ErrQueuedTxIDNotFound, err, "expects tx not found, but call to CompleteTransaction succeeded")
+
+			time.Sleep(1 * time.Second) // make sure that tx complete signal propagates
+			require.False(txQueue.Has(txID), "txqueue should not have test tx at this point (it should be discarded): %s", txID)
+
+			completeQueuedTransaction <- struct{}{} // so that timeout is aborted
+		}
+
+		if envelope.Type == txqueue.EventTransactionFailed {
+			event := envelope.Event.(map[string]interface{})
+			s.T().Logf("transaction return event received: {id: %s}\n", event["id"].(string))
+
+			receivedErrMessage := event["error_message"].(string)
+			expectedErrMessage := txqueue.ErrQueuedTxDiscarded.Error()
+			require.Equal(expectedErrMessage, receivedErrMessage, "unexpected error message received: got %v", receivedErrMessage)
+
+			receivedErrCode := event["error_code"].(string)
+			require.Equal(txqueue.SendTransactionDiscardedErrorCode, receivedErrCode, "unexpected error code received: got %v", receivedErrCode)
+
+			txFailedEventCalled = true
+		}
+	})
+
+	// this call blocks, and should return when DiscardQueuedTransaction() is called
+	txHashCheck, err := s.api.SendTransaction(context.TODO(), common.SendTxArgs{
+		From:  common.FromAddress(TestConfig.Account1.Address),
+		To:    common.ToAddress(TestConfig.Account2.Address),
+		Value: (*hexutil.Big)(big.NewInt(1000000000000)),
+	})
+	require.Equal(txqueue.ErrQueuedTxDiscarded, err, "expected error not thrown: %v", err)
+
+	require.Equal(gethcommon.Hash{}, txHashCheck, "transaction returned hash, while it shouldn't")
+
+	require.Equal(0, txQueue.Count(), "tx queue must be empty at this point")
+
+	require.True(txFailedEventCalled, "expected tx failure signal is not received")
+
+	return true
+}
+
+func (s *APITestSuite) TestDiscardMultipleQueuedTransactions() bool { //nolint: gocyclo
+	require := s.Require()
+	config, err := e2e.MakeTestNodeConfig(GetNetworkID())
+	require.NoError(err)
+	err = s.api.StartNode(config)
+	require.NoError(err)
+	defer s.api.StopNode() //nolint: errcheck
+
+	txQueue := s.api.TxQueueManager().TransactionQueue()
+	txQueue.Reset()
+
+	// log into account from which transactions will be sent
+	err = s.api.SelectAccount(TestConfig.Account1.Address, TestConfig.Account1.Password)
+	require.NoError(err, "cannot select account: %v", TestConfig.Account1.Address)
+
+	// make sure you panic if transaction complete doesn't return
+	testTxCount := 3
+	txIDs := make(chan common.QueuedTxID, testTxCount)
+	allTestTxDiscarded := make(chan struct{}, 1)
+
+	// replace transaction notification handler
+	txFailedEventCallCount := 0
+	signal.SetDefaultNodeNotificationHandler(func(jsonEvent string) {
+		var txID common.QueuedTxID
+		var envelope signal.Envelope
+		err := json.Unmarshal([]byte(jsonEvent), &envelope)
+		require.NoError(err, "cannot unmarshal event's JSON: %s", jsonEvent)
+
+		if envelope.Type == txqueue.EventTransactionQueued {
+			event := envelope.Event.(map[string]interface{})
+			txID = common.QueuedTxID(event["id"].(string))
+			s.T().Logf("transaction queued (will be discarded soon): {id: %s}\n", txID)
+
+			require.True(txQueue.Has(txID), "txqueue should still have test tx: %s", txID)
+
+			txIDs <- txID
+		}
+
+		if envelope.Type == txqueue.EventTransactionFailed {
+			event := envelope.Event.(map[string]interface{})
+			s.T().Logf("transaction return event received: {id: %s}\n", event["id"].(string))
+
+			receivedErrMessage := event["error_message"].(string)
+			expectedErrMessage := txqueue.ErrQueuedTxDiscarded.Error()
+			require.Equal(expectedErrMessage, receivedErrMessage, "unexpected error message received: got %v", receivedErrMessage)
+
+			receivedErrCode := event["error_code"].(string)
+			require.Equal(txqueue.SendTransactionDiscardedErrorCode, receivedErrCode, "unexpected error code received: got %v", receivedErrCode)
+
+			txFailedEventCallCount++
+			if txFailedEventCallCount == testTxCount {
+				allTestTxDiscarded <- struct{}{}
+			}
+		}
+	})
+
+	// this call blocks, and should return when DiscardQueuedTransaction() for a given tx id is called
+	sendTx := func() {
+		txHashCheck, err := s.api.SendTransaction(context.TODO(), common.SendTxArgs{
+			From:  common.FromAddress(TestConfig.Account1.Address),
+			To:    common.ToAddress(TestConfig.Account2.Address),
+			Value: (*hexutil.Big)(big.NewInt(1000000000000)),
+		})
+		require.Equal(txqueue.ErrQueuedTxDiscarded, err, "expected error not thrown: %v", err)
+		require.Equal(gethcommon.Hash{}, txHashCheck, "transaction returned hash, while it shouldn't")
+
+	}
+
+	// wait for transactions, and discard immediately
+	discardTxs := func(txIDs []common.QueuedTxID) {
+		txIDs = append(txIDs, "invalid-tx-id")
+
+		// discard
+		discardResultsStruct, errs := s.api.DiscardTransactions(txIDs)
+		discardResults := discardResultsStruct.Results
+
+		require.Equal(1, len(discardResults))
+		require.Equal(txqueue.ErrQueuedTxIDNotFound, errs["invalid-tx-id"])
+
+		// try completing discarded transaction
+		completeResultsStruct, errs := s.api.CompleteTransactions(txIDs, TestConfig.Account1.Password)
+		completeResults := completeResultsStruct.Results
+
+		require.Equal(testTxCount+1, len(completeResults), "unexpected number of errors (call to CompleteTransaction should not succeed)")
+
+		for txID, txResult := range completeResults {
+			require.Equal(txResult.ID, txID, "tx id not set in result: expected id is %s", txID)
+
+			require.Equal(txqueue.ErrQueuedTxIDNotFound, errs[txID], "invalid error for %s", txResult.Hash)
+
+			require.Equal(gethcommon.Hash{}.Hex(), txResult.Hash, "invalid hash (expected zero): %s", txResult.Hash)
+
+		}
+
+		time.Sleep(1 * time.Second) // make sure that tx complete signal propagates
+		for _, txID := range txIDs {
+			require.False(txQueue.Has(txID), "txqueue should not have test tx at this point (it should be discarded): %s", txID)
+		}
+	}
+	go func() {
+		ids := make([]common.QueuedTxID, testTxCount)
+		for i := 0; i < testTxCount; i++ {
+			ids[i] = <-txIDs
+		}
+
+		discardTxs(ids)
+	}()
+
+	// send multiple transactions
+	for i := 0; i < testTxCount; i++ {
+		go sendTx()
+	}
+
+	select {
+	case <-allTestTxDiscarded:
+		// pass
+	case <-time.After(20 * time.Second):
+		s.FailNow("test timed out")
+		return false
+	}
+
+	if txQueue.Count() != 0 {
+		s.FailNow("tx queue must be empty at this point")
+		return false
+	}
 
 	return true
 }
